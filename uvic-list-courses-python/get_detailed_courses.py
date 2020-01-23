@@ -1,5 +1,7 @@
 import json
 import requests
+import ics
+from datetime import datetime
 from getpass import getpass
 from bs4 import BeautifulSoup
 
@@ -15,9 +17,8 @@ https://documenter.getpostman.com/view/9187076/SVtZwmUP
 
 def get_execution():
 	url = "https://www.uvic.ca/home/tools/index.php"
-
+	
 	response = requests.get(url)
-
 	page = BeautifulSoup(response.text, 'html.parser')
 
 	for i in page.find_all('input'):
@@ -26,45 +27,35 @@ def get_execution():
 
 
 def get_TGC(username, password, execution):
-
 	url = "https://www.uvic.ca/cas/login"
-	
+
 	data = f"username={username}&password={password}&execution={execution}&_eventId=submit"
-
 	headers = {'Content-Type': "application/x-www-form-urlencoded"}
-
 	querystring = {"service":"https://www.uvic.ca/home/tools/index.php"}
 
 	response = requests.request("POST", url, data=data, headers=headers, params=querystring, allow_redirects=False)
-
 	return response.cookies.get("TGC")
 
 
 
 def get_SESSID(TGC):
-
 	url = "https://www.uvic.ca/cas/login"
 
 	querystring = {"service":"https://www.uvic.ca/BAN1P/banuvic.gzcaslib.P_Service_Ticket?target=bwskflib.P_SelDefTerm"}
-
 	headers = {'Cookie': f"TGC={TGC}"}
-
 	response = requests.request("GET", url, headers=headers, params=querystring)
 
 	return response.cookies.get("SESSID")
 
 
 def get_detailed_courses(SESSID):
-
 	url = "https://www.uvic.ca/BAN1P/bwskfshd.P_CrseSchdDetl"
 
 	data = "term_in=202001"
-	
 	headers = {
 		'Content-Type': "application/x-www-form-urlencoded",
 		'Cookie': f"SESSID={SESSID}"
 	}
-
 	response = requests.request("POST", url, data=data, headers=headers )
 
 	return(response)
@@ -95,15 +86,15 @@ def read_course_values(page):
 				# strange middle-name business check the first and last names
 				# This data is un-parsed so we have some inconsistencies to account for
 				if (course_dict[caption]["Instructor"] == "" and "TBA" in v[6].text \
-						#or course_dict[caption]["Instructor"] in ' '.join(v[6].text.split()) \
-						or  ' '.join(course_dict[caption]["Instructor"].split()[0]) == ' '.join(v[6].text.split()[0]) \
-						and ' '.join(course_dict[caption]["Instructor"].split()[2]) == ' '.join(v[6].text.split()[2]) \
+						or course_dict[caption]["Instructor"] in ' '.join(v[6].text.split()) \
+						or  ' '.join(course_dict[caption]["Instructor"].split()[0]) == ' '.join(v[6].text.split()[0])  \
+						and ' '.join(course_dict[caption]["Instructor"].split()[2]) == ' '.join(v[6].text.split()[2])  \
 						):
 					course_values["Type"]          = v[0].text.strip()
 					course_values["Time"]          = v[1].text.strip()
 					course_values["Days"]          = v[2].text.strip()
 					course_values["Where"]         = v[3].text.strip()
-					course_values["Data Range"]    = v[4].text.strip()
+					course_values["Date Range"]    = v[4].text.strip()
 					course_values["Schedule Type"] = v[5].text.strip()
 				#else:
 				#	print("'{}' doesn't contain {}".format(v[6].text, course_dict[caption]['Instructor']))
@@ -128,9 +119,35 @@ def read_course_values(page):
 
 	return course_dict
 
+
+def parse_course_dict(course_dict):
+	parsed_dict = {}
+
+	for course_name in course_dict:
+		course = course_dict[course_name]
+		parsed_course = {}
+		
+		parsed_course["title"]   = course_name.split(" - ")[0]
+		parsed_course["code"]    = course_name.split(" - ")[1]
+		parsed_course["section"] = course_name.split(" - ")[2]
+
+		parsed_course["start_time"] = course["Time"].split(" - ")[0]
+		parsed_course["end_time"]   = course["Time"].split(" - ")[1]
+
+		parsed_course["start_date"] = course["Date Range"].split(" - ")[0]
+		parsed_course["end_date"]   = course["Date Range"].split(" - ")[1]
+
+		parsed_course["location"] = course["Where"]
+		
+		# Append our parsed course, using the CRN as a key.
+		parsed_dict[course["CRN"]] = parsed_course
+
+	return parsed_dict
+
+
 def main():
 	print("Log in to UVic")
-	username = input("Username: ")
+	username = input("Username: ") or "malcolmseyd"
 	password = getpass("Password: ")
 
 	execution = get_execution()
@@ -151,8 +168,6 @@ def main():
 
 	page = BeautifulSoup(detailed_courses.content, 'html.parser')
 
-	#print(page.prettify())
-
 	"""
 	f=open("page.html", "w")
 	f.write(page.prettify())
@@ -161,9 +176,15 @@ def main():
 
 	course_dict_raw = read_course_values(page)
 
-	print(json.dumps(course_dict_raw, indent=4, sort_keys=False))
+	#print(json.dumps(course_dict_raw, indent=4, sort_keys=False))
 
 	# TODO Parse the json and get useable values
+
+	parsed_courses = parse_course_dict(course_dict_raw)
+
+	print(json.dumps(parsed_courses, indent=4, sort_keys=False))
+
+
 
 if __name__ == "__main__":
 	main()
