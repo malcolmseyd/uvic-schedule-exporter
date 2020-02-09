@@ -1,17 +1,20 @@
 import json
 import requests
-import ics
+from icalendar import Calendar, Event, vRecur
 from datetime import datetime
 from getpass import getpass
 from bs4 import BeautifulSoup
+from os import remove
 
 """
-"What the heck is this, you want my Netlink ID?!"
+Your Netlink ID is never stored and is only sent to UVic's servers.
 Please see the link below for documentation:
 https://documenter.getpostman.com/view/9187076/SVtZwmUP
 """
 
-#main_session = requests.session()
+# Cache page so that we're not spamming UVic's API while testing
+CACHE_PAGE = False
+
 
 # For these four get_XXXX() functions, see the documentation above
 
@@ -51,6 +54,7 @@ def get_SESSID(TGC):
 def get_detailed_courses(SESSID):
 	url = "https://www.uvic.ca/BAN1P/bwskfshd.P_CrseSchdDetl"
 
+	# TODO Allow user to select term
 	data = "term_in=202001"
 	headers = {
 		'Content-Type': "application/x-www-form-urlencoded",
@@ -82,13 +86,13 @@ def read_course_values(page):
 
 				# TODO Add support for multi-row schedules like ENGR 110 with plenary lectures
 
-				# If the instructor is TBA, or if it is your instructor, or if there is some
-				# strange middle-name business check the first and last names
-				# This data is un-parsed so we have some inconsistencies to account for
-				if (course_dict[caption]["Instructor"] == "" and "TBA" in v[6].text \
+				# Match the schedule to your instructor and exclude midterm exams
+				if ((
+						course_dict[caption]["Instructor"] == "" and "TBA" in v[6].text \
 						or course_dict[caption]["Instructor"] in ' '.join(v[6].text.split()) \
 						or  ' '.join(course_dict[caption]["Instructor"].split()[0]) == ' '.join(v[6].text.split()[0])  \
-						and ' '.join(course_dict[caption]["Instructor"].split()[2]) == ' '.join(v[6].text.split()[2])  \
+						and ' '.join(course_dict[caption]["Instructor"].split()[2]) == ' '.join(v[6].text.split()[2]))  \
+						and v[0].text.strip().lower() != "Midterm Exam".lower()
 						):
 					course_values["Type"]          = v[0].text.strip()
 					course_values["Time"]          = v[1].text.strip()
@@ -139,13 +143,67 @@ def parse_course_dict(course_dict):
 
 		parsed_course["location"] = course["Where"]
 		
+		parsed_course["days"] = parse_days(course["Days"])
+
 		# Append our parsed course, using the CRN as a key.
 		parsed_dict[course["CRN"]] = parsed_course
 
 	return parsed_dict
 
+def parse_days(day_string):
+	# This function lookS at the letters "MTWRFS" and converts them to weekdays
+	# This won't support Sunday classes as I've never encountered them.
+	days = []
+	for c in day_string:
+		if c == "M":
+			days.append("MO")
+		elif c == "T":
+			days.append("TU")
+		elif c == "W":
+			days.append("WE")
+		elif c == "R":
+			days.append("TH")
+		elif c == "F":
+			days.append("FR")
+		elif c == "S":
+			days.append("SA")
+	return days 
 
-def main():
+
+def create_ics(courses):
+	cal = Calendar()
+	for c in courses:
+		course = courses[c]
+		event = Event()
+
+		# Time formatting is similar to unix "date" command
+		start_time = datetime.strptime(f'{course["start_date"]} {course["start_time"]}', '%b %d, %Y %I:%M %p')
+		end_time   = datetime.strptime(f'{course["start_date"]} {course["end_time"]  }', '%b %d, %Y %I:%M %p')
+		end_date   = datetime.strptime(f'{course["end_date"]  } {course["end_time"]  }', '%b %d, %Y %I:%M %p')
+		days = course["days"]
+
+		event.add("summary", f"{course['code']} {course['section']}")
+
+		event.add("dtstart", start_time)
+		event.add("dtend", end_time)
+		event.add("dtstamp", datetime.now())
+
+		event.add("location", course["location"])
+
+		event.add('rrule', vRecur({
+			"freq": "WEEKLY",
+			"interval": 1,
+			"until": end_date,
+			"byday": days
+		}))
+		
+		cal.add_component(event)
+	
+	# TODO confirm file overwrite
+	open("output.ics", "wb").write(cal.to_ical())
+
+
+def fetch_page():
 	print("Log in to UVic")
 	username = input("Username: ") or "malcolmseyd"
 	password = getpass("Password: ")
@@ -164,26 +222,38 @@ def main():
 
 	detailed_courses = get_detailed_courses(SESSID)
 
-	#print(json.dumps(detailed_courses.headers.__dict__, indent=4, sort_keys=True))
+	# print(json.dumps(detailed_courses.headers.__dict__, indent=4, sort_keys=True))
 
 	page = BeautifulSoup(detailed_courses.content, 'html.parser')
 
-	"""
-	f=open("page.html", "w")
-	f.write(page.prettify())
-	f.close()
-	"""
+	if CACHE_PAGE:
+		open("page.html", "wb").write(detailed_courses.content)
+	
+	return page
 
+
+def main():
+	try:
+		with open("page.html") as in_file:
+			if CACHE_PAGE != True:
+				remove("page.html")
+				raise FileNotFoundError
+			else:
+				page = BeautifulSoup(in_file.read(), 'html.parser')
+				in_file.close()
+				
+	except FileNotFoundError:
+		page = fetch_page()	
+		
 	course_dict_raw = read_course_values(page)
 
 	#print(json.dumps(course_dict_raw, indent=4, sort_keys=False))
 
-	# TODO Parse the json and get useable values
-
 	parsed_courses = parse_course_dict(course_dict_raw)
 
-	print(json.dumps(parsed_courses, indent=4, sort_keys=False))
+	#print(json.dumps(parsed_courses, indent=4, sort_keys=False))
 
+	create_ics(parsed_courses)
 
 
 if __name__ == "__main__":
