@@ -200,7 +200,7 @@ def create_ics(courses):
 		cal.add_component(event)
 	
 	# TODO confirm file overwrite
-	open("output.ics", "wb").write(cal.to_ical())
+	open("schedule.ics", "wb").write(cal.to_ical())
 
 
 def fetch_page():
