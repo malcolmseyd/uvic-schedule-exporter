@@ -1,5 +1,6 @@
 import json
 import requests
+from datetime import date, datetime
 from icalendar import Calendar, Event, vRecur
 from datetime import datetime
 from getpass import getpass
@@ -19,242 +20,339 @@ CACHE_PAGE = False
 # For these four get_XXXX() functions, see the documentation above
 
 def get_execution():
-	url = "https://www.uvic.ca/home/tools/index.php"
-	
-	response = requests.get(url)
-	page = BeautifulSoup(response.text, 'html.parser')
+    url = "https://www.uvic.ca/cas/login"
+    
+    response = requests.get(url)
+    page = BeautifulSoup(response.text, 'html.parser')
 
-	for i in page.find_all('input'):
-		if i['name'] == 'execution':
-			return i['value']
+    for i in page.find_all('input'):
+        if i['name'] == 'execution':
+            return i['value']
 
 
 def get_TGC(username, password, execution):
-	url = "https://www.uvic.ca/cas/login"
+    url = "https://www.uvic.ca/cas/login"
 
-	data = f"username={username}&password={password}&execution={execution}&_eventId=submit"
-	headers = {'Content-Type': "application/x-www-form-urlencoded"}
-	querystring = {"service":"https://www.uvic.ca/home/tools/index.php"}
+    data = f"username={username}&password={password}&execution={execution}&_eventId=submit"
+    headers = {'Content-Type': "application/x-www-form-urlencoded"}
+    querystring = {"service":"https://www.uvic.ca/home/tools/index.php"}
 
-	response = requests.request("POST", url, data=data, headers=headers, params=querystring, allow_redirects=False)
-	return response.cookies.get("TGC")
+    response = requests.request("POST", url, data=data, headers=headers, params=querystring, allow_redirects=False)
+    return response.cookies.get("TGC")
 
 
 
 def get_SESSID(TGC):
-	url = "https://www.uvic.ca/cas/login"
+    url = "https://www.uvic.ca/cas/login"
 
-	querystring = {"service":"https://www.uvic.ca/BAN1P/banuvic.gzcaslib.P_Service_Ticket?target=bwskflib.P_SelDefTerm"}
-	headers = {'Cookie': f"TGC={TGC}"}
-	response = requests.request("GET", url, headers=headers, params=querystring)
+    querystring = {"service":"https://www.uvic.ca/BAN1P/banuvic.gzcaslib.P_Service_Ticket?target=bwskflib.P_SelDefTerm"}
+    headers = {'Cookie': f"TGC={TGC}"}
+    response = requests.request("GET", url, headers=headers, params=querystring)
 
-	return response.cookies.get("SESSID")
-
-
-def get_detailed_courses(SESSID):
-	url = "https://www.uvic.ca/BAN1P/bwskfshd.P_CrseSchdDetl"
-
-	# TODO Allow user to select term
-	data = "term_in=202001"
-	headers = {
-		'Content-Type': "application/x-www-form-urlencoded",
-		'Cookie': f"SESSID={SESSID}"
-	}
-	response = requests.request("POST", url, data=data, headers=headers )
-
-	return(response)
+    return response.cookies.get("SESSID")
 
 
+def get_detailed_courses(SESSID, term):
+    url = "https://www.uvic.ca/BAN1P/bwskfshd.P_CrseSchdDetl"
+
+    data = f"term_in={term}"
+    headers = {
+        'Content-Type': "application/x-www-form-urlencoded",
+        'Cookie': f"SESSID={SESSID}"
+    }
+    response = requests.request("POST", url, data=data, headers=headers )
+
+    return(response)
+
+
+# we parse (almost) everything for completeness but not all values are used.
 def read_course_values(page):
-	course_dict = {}
-	prev_course = None
+    course_dict = {}
+    current_course = None
 
-	for t in page.select("table.datadisplaytable"):
-		caption = t.select("caption.captiontext")[0].text
-		#print(caption)
+    for t in page.select("table.datadisplaytable"):
+        caption = t.select("caption.captiontext")[0].text
+        #print(caption)
 
-		# temporary dict to store our things
-		course_values = {}
 
-		if caption == "Scheduled Meeting Times":
-			# If it's the schedule, set the name to the respective course
-			caption = prev_course
+        if caption == "Scheduled Meeting Times":
+            scheduleArray = []
 
-			for row in t.select("tr")[1:]:
-				v = row.select("td.dddefault")
-				##print(caption + v[])
+            for row in t.select("tr")[1:]:
 
-				# TODO Add support for multi-row schedules like ENGR 110 with plenary lectures
+                schedule = {}
 
-				# Match the schedule to your instructor and exclude midterm exams
-				if ((
-						course_dict[caption]["Instructor"] == "" and "TBA" in v[6].text \
-						or course_dict[caption]["Instructor"] in ' '.join(v[6].text.split()) \
-						or  ' '.join(course_dict[caption]["Instructor"].split()[0]) == ' '.join(v[6].text.split()[0])  \
-						and ' '.join(course_dict[caption]["Instructor"].split()[2]) == ' '.join(v[6].text.split()[2]))  \
-						and v[0].text.strip().lower() != "Midterm Exam".lower()
-						):
-					course_values["Type"]          = v[0].text.strip()
-					course_values["Time"]          = v[1].text.strip()
-					course_values["Days"]          = v[2].text.strip()
-					course_values["Where"]         = v[3].text.strip()
-					course_values["Date Range"]    = v[4].text.strip()
-					course_values["Schedule Type"] = v[5].text.strip()
-				#else:
-				#	print("'{}' doesn't contain {}".format(v[6].text, course_dict[caption]['Instructor']))
+                # all of the values are in this array
+                fields = row.select("td.dddefault")
 
-			course_dict[caption].update(course_values)
+                schedule["Type"]          = fields[0].text.strip()
+                schedule["Time"]          = fields[1].text.strip()
+                schedule["Days"]          = fields[2].text.strip()
+                schedule["Where"]         = fields[3].text.strip()
+                schedule["Date Range"]    = fields[4].text.strip()
+                schedule["Schedule Type"] = fields[5].text.strip()
+                # ignore instructors because we already have them
 
-			#course_dict[caption] = course_values
-		else:
-			v = t.select("td.dddefault")
-			course_values["Term"]       = v[0].text.strip()
-			course_values["CRN"]        = v[1].text.strip()
-			course_values["Status"]     = v[2].text.strip()
-			course_values["Instructor"] = v[3].text.strip().split(",")[0]
-			course_values["Grade Mode"] = v[4].text.strip()
-			course_values["Credits"]    = v[5].text.strip()
-			course_values["Level"]      = v[6].text.strip()
-			course_values["Campus"]     = v[7].text.strip()
+                scheduleArray.append(schedule)
 
-			course_dict[caption] = course_values
+            # finally update the dictionary
+            course_dict[current_course]["Schedule"] = scheduleArray
+            
+        else:
+            course_values = {}
+            current_course = caption
+            
+            fields = t.select("td.dddefault")
+            course_values["Term"]        = fields[0].text.strip()
+            course_values["CRN"]         = fields[1].text.strip()
+            course_values["Status"]      = fields[2].text.strip()
+            course_values["Instructors"] = fields[3].text.strip().split(",")
+            course_values["Grade Mode"]  = fields[4].text.strip()
+            course_values["Credits"]     = fields[5].text.strip()
+            course_values["Level"]       = fields[6].text.strip()
+            course_values["Campus"]      = fields[7].text.strip()
 
-		prev_course = caption
+            # try removing empty profs			
+            try:
+                course_values["Instructors"].remove("")
+            except ValueError:
+                pass
 
-	return course_dict
+            for i in range(len(course_values["Instructors"])):
+                course_values["Instructors"][i] = course_values["Instructors"][i].strip() 
+
+            course_dict[current_course] = course_values
+
+    return course_dict
 
 
 def parse_course_dict(course_dict):
-	parsed_dict = {}
+    parsed_dict = {}
 
-	for course_name in course_dict:
-		course = course_dict[course_name]
-		parsed_course = {}
-		
-		parsed_course["title"]   = course_name.split(" - ")[0]
-		parsed_course["code"]    = course_name.split(" - ")[1]
-		parsed_course["section"] = course_name.split(" - ")[2]
+    for course_name in course_dict:
+        course = course_dict[course_name]
+        parsed_course = {}
+        
+        parsed_course["title"]   = course_name.split(" - ")[0]
+        parsed_course["code"]    = course_name.split(" - ")[1]
+        parsed_course["section"] = course_name.split(" - ")[2]
 
-		parsed_course["start_time"] = course["Time"].split(" - ")[0]
-		parsed_course["end_time"]   = course["Time"].split(" - ")[1]
+        parsed_course["schedule"] = []
 
-		parsed_course["start_date"] = course["Date Range"].split(" - ")[0]
-		parsed_course["end_date"]   = course["Date Range"].split(" - ")[1]
+        for sched in course["Schedule"]:
+            new_schedule = {}
 
-		parsed_course["location"] = course["Where"]
-		
-		parsed_course["days"] = parse_days(course["Days"])
+            new_schedule["start_time"] = sched["Time"].split(" - ")[0]
+            new_schedule["end_time"]   = sched["Time"].split(" - ")[1]
 
-		# Append our parsed course, using the CRN as a key.
-		parsed_dict[course["CRN"]] = parsed_course
+            new_schedule["start_date"] = sched["Date Range"].split(" - ")[0]
+            new_schedule["end_date"]   = sched["Date Range"].split(" - ")[1]
 
-	return parsed_dict
+            new_schedule["location"] = sched["Where"]
+            
+            new_schedule["days"] = days_to_ics(sched["Days"])
 
-def parse_days(day_string):
-	# This function lookS at the letters "MTWRFS" and converts them to weekdays
-	# This won't support Sunday classes as I've never encountered them.
-	days = []
-	for c in day_string:
-		if c == "M":
-			days.append("MO")
-		elif c == "T":
-			days.append("TU")
-		elif c == "W":
-			days.append("WE")
-		elif c == "R":
-			days.append("TH")
-		elif c == "F":
-			days.append("FR")
-		elif c == "S":
-			days.append("SA")
-	return days 
+            parsed_course["schedule"].append(new_schedule)
+
+        # Append our parsed course, using the CRN as a key.
+        parsed_dict[course["CRN"]] = parsed_course
+
+    return parsed_dict
+
+def days_to_ics(day_string):
+    # This function lookS at the letters "MTWRFS" and converts them to weekdays
+    # This won't support Sunday classes as I've never encountered them.
+    # I could probably do this as a map
+    days = []
+    for c in day_string:
+        if c == "M":
+            days.append("MO")
+        elif c == "T":
+            days.append("TU")
+        elif c == "W":
+            days.append("WE")
+        elif c == "R":
+            days.append("TH")
+        elif c == "F":
+            days.append("FR")
+        elif c == "S":
+            days.append("SA")
+    return days 
+
+def ics_day_to_number(day):
+    # all days, including sunday
+    # i suppose this could be a dict, idk how performance compares though
+    if day == "MO":
+        return 0
+    elif day == "TU":
+        return 1
+    elif day == "WE":
+        return 2
+    elif day == "TH":
+        return 3
+    elif day == "FR":
+        return 4
+    elif day == "SA":
+        return 5
+    elif day == "SU":
+        return 6
 
 
-def create_ics(courses):
-	cal = Calendar()
-	for c in courses:
-		course = courses[c]
-		event = Event()
+def create_ics(courses, filename):
+    cal = Calendar()
+    for c in courses:
+        course = courses[c]
 
-		# Time formatting is similar to unix "date" command
-		start_time = datetime.strptime(f'{course["start_date"]} {course["start_time"]}', '%b %d, %Y %I:%M %p')
-		end_time   = datetime.strptime(f'{course["start_date"]} {course["end_time"]  }', '%b %d, %Y %I:%M %p')
-		end_date   = datetime.strptime(f'{course["end_date"]  } {course["end_time"]  }', '%b %d, %Y %I:%M %p')
-		days = course["days"]
+        # create a new calender event for each lecture time (for classes like ENGR 120)
+        for schedule in course["schedule"]:
+            event = Event()
 
-		event.add("summary", f"{course['code']} {course['section']}")
+            # Time formatting is similar to unix "date" command
+            start_time = datetime.strptime(f'{schedule["start_date"]} {schedule["start_time"]}', '%b %d, %Y %I:%M %p')
+            end_time   = datetime.strptime(f'{schedule["start_date"]} {schedule["end_time"]  }', '%b %d, %Y %I:%M %p')
+            end_date   = datetime.strptime(f'{schedule["end_date"]  } {schedule["end_time"]  }', '%b %d, %Y %I:%M %p')
+            days = schedule["days"]
 
-		event.add("dtstart", start_time)
-		event.add("dtend", end_time)
-		event.add("dtstamp", datetime.now())
+            numeric_days = []
+            for d in days:
+                numeric_days.append(ics_day_to_number(d))
 
-		event.add("location", course["location"])
+            # fix if the start date is not an included day
+            while start_time.weekday() not in numeric_days:
+                try:
+                    start_time = start_time.replace(day=start_time.day+1)
+                except ValueError:
+                    if start_time.month == 12:
+                        start_time = start_time.replace(day=1, month=1, year=start_time.year+1)
+                    else:
+                        start_time = start_time.replace(day=1, month=start_time.month+1)
+            else:
+                # update end time accordingly
+                end_time = datetime.combine(date=start_time.date(), time=end_time.time())
 
-		event.add('rrule', vRecur({
-			"freq": "WEEKLY",
-			"interval": 1,
-			"until": end_date,
-			"byday": days
-		}))
-		
-		cal.add_component(event)
-	
-	# TODO confirm file overwrite
-	open("schedule.ics", "wb").write(cal.to_ical())
+            event.add("summary", f"{course['code']} {course['section']}")
+
+            event.add("dtstart", start_time)
+            event.add("dtend", end_time)
+            event.add("dtstamp", datetime.now())
+
+            event.add("location", schedule["location"])
+
+            event.add('rrule', vRecur({
+                "freq": "WEEKLY",
+                "interval": 1,
+                "until": end_date,
+                "byday": days
+            }))
+            
+            cal.add_component(event)
+    
+    with open(f"{filename}.ics", "wb") as f:
+        f.write(cal.to_ical())
+        f.close()
+
+
+def getTerm():
+    terms = {
+        1: "Spring",
+        5: "Summer",
+        9: "Fall"
+    }
+
+    today = date.today()
+    thisYear = today.year
+    thisMonth = today.month
+    # restrict to 1, 5, 9
+    thisTerm = ((thisMonth - 1) // 4 * 4) + 1
+
+    year = input(f"Year [{thisYear}]: ")
+    if year == '':
+        year = thisYear
+
+    term = input(f"Term [{terms[thisTerm]}]: ")
+    if term == '':
+        term = terms[thisTerm]
+
+    if term[0:2].lower() == "sp":
+        return f"{year}01"
+    elif term[0:2].lower() == "su":
+        return f"{year}05"
+    elif term[0].lower() == "f":
+        return f"{year}09"
+    else:
+        print("Invalid term. Options are (sp)ring, (su)mmer, (f)all")
+        exit(1)
+
+    
 
 
 def fetch_page():
-	print("Log in to UVic")
-	username = input("Username: ") or "malcolmseyd"
-	password = getpass("Password: ")
+    try:
+        term = getTerm()
+        print("Log in to UVic")
+        username = input("Username: ") or "malcolmseyd"
+        password = getpass("Password: ")
+    except KeyboardInterrupt:
+        print("\nQuitting.")
+        exit(0)
 
-	execution = get_execution()
-	#print(execution)
-	TGC = get_TGC(username, password, execution)
-	
-	if (TGC == None):
-		print("Error: Failed to log in.")
-		exit(1)
+    print("Downloading...")
+    
+    execution = get_execution()
+    #print(execution)
+    TGC = get_TGC(username, password, execution)
+    
+    if (TGC == None):
+        print("Error: Failed to log in.")
+        exit(1)
 
-	#print(TGC)
-	SESSID = get_SESSID(TGC)
-	#print(SESSID)
+    #print(TGC)
+    SESSID = get_SESSID(TGC)
+    #print(SESSID)
 
-	detailed_courses = get_detailed_courses(SESSID)
+    detailed_courses = get_detailed_courses(SESSID, term)
 
-	# print(json.dumps(detailed_courses.headers.__dict__, indent=4, sort_keys=True))
+    # print(json.dumps(detailed_courses.headers.__dict__, indent=4, sort_keys=True))
 
-	page = BeautifulSoup(detailed_courses.content, 'html.parser')
+    page = BeautifulSoup(detailed_courses.content, 'html.parser')
 
-	if CACHE_PAGE:
-		open("page.html", "wb").write(detailed_courses.content)
-	
-	return page
+    if CACHE_PAGE:
+        open("page.html", "wb").write(detailed_courses.content)
+    
+    return (page, term)
 
 
 def main():
-	try:
-		with open("page.html") as in_file:
-			if CACHE_PAGE != True:
-				remove("page.html")
-				raise FileNotFoundError
-			else:
-				page = BeautifulSoup(in_file.read(), 'html.parser')
-				in_file.close()
-				
-	except FileNotFoundError:
-		page = fetch_page()	
-		
-	course_dict_raw = read_course_values(page)
+    try:
+        with open("page.html") as in_file:
+            if CACHE_PAGE != True:
+                remove("page.html")
+                raise FileNotFoundError
+            else:
+                page = BeautifulSoup(in_file.read(), 'html.parser')
+                in_file.close()
+        term = "testing"
+                
+    except FileNotFoundError:
+        page, term = fetch_page()	
 
-	#print(json.dumps(course_dict_raw, indent=4, sort_keys=False))
+    print("Parsing...")        
+    course_dict_raw = read_course_values(page)
 
-	parsed_courses = parse_course_dict(course_dict_raw)
+    if course_dict_raw == {}:
+        print("Error fetching course data")
 
-	#print(json.dumps(parsed_courses, indent=4, sort_keys=False))
+    # print(json.dumps(course_dict_raw, indent=4, sort_keys=False))
 
-	create_ics(parsed_courses)
+    parsed_courses = parse_course_dict(course_dict_raw)
+ 
+    # print(json.dumps(parsed_courses, indent=4, sort_keys=False))
+
+    filename = "schedule"
+    create_ics(parsed_courses, f"{filename}-{term}")
+
+    print(f"Done. Wrote to {filename}-{term}.ics")
 
 
 if __name__ == "__main__":
-	main()
+    main()
