@@ -67,6 +67,11 @@ def get_detailed_courses(SESSID, term):
 
 # we parse (almost) everything for completeness but not all values are used.
 def read_course_values(page):
+
+    if "You are not currently registered for the term." in str(page):
+        print("You're not registered for this term!")
+        exit(1)
+
     course_dict = {}
     current_course = None
 
@@ -141,6 +146,9 @@ def parse_course_dict(course_dict):
 
         for sched in course["Schedule"]:
             new_schedule = {}
+
+            if sched["Time"] == "TBA":
+                continue
 
             new_schedule["start_time"] = sched["Time"].split(" - ")[0]
             new_schedule["end_time"]   = sched["Time"].split(" - ")[1]
