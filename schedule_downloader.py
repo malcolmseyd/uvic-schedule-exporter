@@ -207,6 +207,13 @@ def ics_day_to_number(day):
 
 
 def create_ics(courses, filename):
+    # UVic is GMT-7
+    tz = "-0700"
+    # Unix "date" style format string for datetime importing
+    # Example:
+    #   "Jan 01, 2021 12:59 PM -0700"
+    tformat = "%b %d, %Y %I:%M %p %z"
+
     cal = Calendar()
     for c in courses:
         course = courses[c]
@@ -216,9 +223,9 @@ def create_ics(courses, filename):
             event = Event()
 
             # Time formatting is similar to unix "date" command
-            start_time = datetime.strptime(f'{schedule["start_date"]} {schedule["start_time"]}', '%b %d, %Y %I:%M %p')
-            end_time   = datetime.strptime(f'{schedule["start_date"]} {schedule["end_time"]  }', '%b %d, %Y %I:%M %p')
-            end_date   = datetime.strptime(f'{schedule["end_date"]  } {schedule["end_time"]  }', '%b %d, %Y %I:%M %p')
+            start_time = datetime.strptime(f'{schedule["start_date"]} {schedule["start_time"]} {tz}', tformat)
+            end_time   = datetime.strptime(f'{schedule["start_date"]} {schedule["end_time"]  } {tz}', tformat)
+            end_date   = datetime.strptime(f'{schedule["end_date"]  } {schedule["end_time"]  } {tz}', tformat)
             days = schedule["days"]
 
             numeric_days = []
