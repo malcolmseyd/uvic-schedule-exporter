@@ -23,13 +23,13 @@ Done. Wrote to schedule-202201.ics
 
 ## FAQ
 
-**Q.** Why does it need my Netlink ID?  
+**Q.** Why does it need my Netlink ID and password?  
 **A.** It uses it to [get your schedule](https://documenter.getpostman.com/view/9187076/SVtZwmUP). If you don't trust it, read the code.
 
 **Q.** I can't see my password when I type it? What's happening?  
-**A.** Don't worry, it's just being hidden. The program will still read it
+**A.** Don't worry, it's just being hidden from the terminal. The program will still read it
 
-**Q.** What are those square brackets for the year an term?  
+**Q.** What are those square brackets for the year and term?  
 **A.** Those are default options. If you put nothing, then the option in the square bracket will be chosen by default.
 
 **Q.** What options are there for the term?  
