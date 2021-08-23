@@ -1,5 +1,19 @@
 # UVic Schedule Exporter
 
+## Usage
+
+Install the dependencies.
+```shell
+pip install -r requirements.txt
+```
+
+Run the program.
+```shell
+python schedule_downloader.py
+```
+
+## About
+
 What started out as a simple web scraping project eventually turned into a useful tool that can integrate with common calendar software. Let's see how it works.
 
 On UVic's website, they support viewing your schecule as a list of courses. The first part of my script logs into the website and downloads the date. [I've documented the API calls here.](https://documenter.getpostman.com/view/9187076/SVtZwmUP)
