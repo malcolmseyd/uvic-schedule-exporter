@@ -4,13 +4,36 @@
 
 Install the dependencies.
 ```shell
-pip install -r requirements.txt
+$ pip install -r requirements.txt
 ```
 
 Run the program.
 ```shell
-python schedule_downloader.py
+$ # Some example output of the interactive prompt
+$ python schedule_downloader.py
+Year [2021]: 2022
+Term [Summer]: Spring
+Log in to UVic
+Username: malcolmseyd
+Password: 
+Downloading...
+Parsing...
+Done. Wrote to schedule-202201.ics
 ```
+
+## FAQ
+
+**Q.** Why does it need my Netlink ID?  
+**A.** It uses it to [get your schedule](https://documenter.getpostman.com/view/9187076/SVtZwmUP). If you don't trust it, read the code.
+
+**Q.** I can't see my password when I type it? What's happening?  
+**A.** Don't worry, it's just being hidden. The program will still read it
+
+**Q.** What are those square brackets for the year an term?  
+**A.** Those are default options. If you put nothing, then the option in the square bracket will be chosen by default.
+
+**Q.** What options are there for the term?  
+**A.** `spring`, `summer`, and `fall`, case insensitive. `sp`, `su`, and `f` also work as abbreviations.
 
 ## About
 
