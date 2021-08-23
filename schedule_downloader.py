@@ -305,7 +305,7 @@ def fetch_page():
     try:
         term = getTerm()
         print("Log in to UVic")
-        username = input("Username: ") or "malcolmseyd"
+        username = input("Username: ")
         password = getpass("Password: ")
     except KeyboardInterrupt:
         print("\nQuitting.")
