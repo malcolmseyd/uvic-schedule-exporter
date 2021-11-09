@@ -259,8 +259,10 @@ def create_ics(courses, filename):
 
             event.add("summary", f"{course['code']} {course['section']}")
 
-            event.add("dtstart", start_time)
-            event.add("dtend", end_time)
+            event.add("dtstart", start_time, parameters={
+                      'TZID': 'America/Vancouver'})
+            event.add("dtend", end_time, parameters={
+                      'TZID': 'America/Vancouver'})
             event.add("dtstamp", datetime.now())
 
             event.add("location", schedule["location"])
@@ -276,20 +278,6 @@ def create_ics(courses, filename):
 
     with open(f"{filename}.ics", "wb") as f:
         f.write(cal.to_ical())
-
-    filedata = None
-    with open(f"{filename}.ics", "r") as f:
-        filedata = f.read()
-
-    # We must insert the TZID field into the DTSTART and DTEND fields. I don't know why this is the convention, but it is.
-    # America/Vancouver, US/Pacific, and America/Los_Angeles are all valid timezone names
-    outputdata = filedata.replace("DTSTART;VALUE=DATE-TIME",
-                                  "DTSTART;TZID=America/Vancouver")
-    outputdata = outputdata.replace("DTEND;VALUE=DATE-TIME",
-                                    "DTEND;TZID=America/Vancouver")
-
-    with open(f"{filename}.ics", "w") as f:
-        f.write(outputdata)
 
 
 def getTerm():
