@@ -6,7 +6,6 @@ from datetime import datetime
 from getpass import getpass
 from bs4 import BeautifulSoup
 from os import remove
-from pytz import timezone
 
 """
 Your Netlink ID is never stored and is only sent to UVic's servers.
