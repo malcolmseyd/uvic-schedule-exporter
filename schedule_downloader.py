@@ -1,7 +1,7 @@
 import json
 import requests
 from datetime import date, datetime
-from icalendar import Calendar, Event, vRecur, vDatetime
+from icalendar import Calendar, Event, vRecur
 from datetime import datetime
 from getpass import getpass
 from bs4 import BeautifulSoup
