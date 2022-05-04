@@ -1,5 +1,9 @@
 # UVic Schedule Exporter
 
+**This project is unmaintained.**
+
+It is broken due to UVic changing which version of Banner that they are using. Thank you for using my software, I hope it has served you well.**
+
 ## Usage
 
 Install the dependencies.
